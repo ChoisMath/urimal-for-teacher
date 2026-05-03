@@ -1,0 +1,36 @@
+# 런타임 산출물
+_workspace/
+**/_workspace/
+
+# Node
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 환경 변수
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 빌드 캐시 (kordoc은 dist/ 동봉이므로 dist는 제외하지 않음)
+.cache/
+.parcel-cache/
+*.log
+
+# voice profile telemetry (사용자 로컬 산출물)
+voice_profile_log.json
+taxonomy_changelog.md
