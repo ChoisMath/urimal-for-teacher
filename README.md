@@ -1,8 +1,10 @@
 # urimal-for-socialworker
 
-사회복지사가 직접 쓴 **계획서·주간업무보고서·사업보고서**를 한덕연 선생님의 **우리말 36항목** 기준으로 자연스럽고 바른 우리말로 윤문해 주는 [Claude Code](https://claude.com/claude-code) 스킬입니다.
+사회복지사가 직접 쓴 **계획서·주간업무보고서·사업보고서**를 한덕연 선생님의 **우리말 36항목** + 사회복지 14개 카테고리 + AI 티 기준으로 자연스럽고 바른 우리말로 윤문해 주는 [Claude Code](https://claude.com/claude-code) 스킬입니다.
 
 > 내용은 **한 글자도 건드리지 않고**, 문체·호응·표현만 다듬습니다. 최종 결과물에 **무엇을 왜 바꿨는지** 변경 이유 표를 함께 제공해 글쓰기 공부에 도움이 되도록 만들었습니다.
+
+> **v2.1 (2026-05-10)** — Fast Path 도입. 5,000자 보고서 윤문이 25분에서 **2~3분**으로 단축. upstream `epoko77-ai/im-not-ai v1.5~v2.0` monolith 아키텍처를 사회복지 도메인으로 가져왔습니다. [v2.1 변경 내역](#v21--fast-path--분류-체계-동기화--정량-점수-레이어-2026-05-10)
 
 ---
 
@@ -22,25 +24,31 @@
 
 ## 어떻게 동작하나
 
+v2.1부터 **두 가지 경로**가 있습니다.
+
+### Fast 모드 (디폴트, 2~3분)
+
 ```
 입력 (사회복지사가 쓴 초안)
     ↓
-[sw-pattern-detector]       — 우리말 36항목 기반 사회복지 특화 오류 탐지
-    ↓
-[ai-tell-detector]          — 딱딱한 문어체·번역투 탐지
-    ↓
-[korean-style-rewriter]     — 통합 finding 기반 수술적 윤문
-    ↓
-[병렬 검증 팀]
-    ├─ [content-fidelity-auditor]   — 의미 동등성 감사 (13항)
-    └─ [naturalness-reviewer]       — 잔존·과윤문 판정
-    ↓
-[오케스트레이터 종합 판정]
-    ├─ accept → final.md + summary.md
-    ├─ rewrite_round_2 → 2차 윤문 (최대 3회)
-    ├─ rollback_and_rewrite → 문제 edit 롤백
-    └─ hold_and_report → 사람 검토 권고
+[urimal-monolith — 단일 호출]
+    ├ 메모리 안에서: 사회복지 14개 카테고리 + 한덕연 36항목 + AI 티 핵심 일괄 탐지
+    ├ 메모리 안에서: 윤문 + 자체검증 7항
+    └ Write final.md (URIMAL-SUMMARY 메타 블록 포함)
 ```
+
+도구 호출 3회 캡. 5,000자 입력 wall-clock 2~3분, 모델 호출 비용 1/6 수준.
+
+### Strict 모드 (자동 승급 또는 `--strict`)
+
+```
+입력 → [sw-pattern-detector] → [ai-tell-detector] → [korean-style-rewriter]
+    → [병렬 팀: content-fidelity-auditor + naturalness-reviewer]
+    → [오케스트레이터 종합 판정 → 최대 3회 재윤문]
+    → final.md + summary.md
+```
+
+자동 승급 조건: 입력 8,000자+, 부분 재실행("이 문단만 다시"·"카테고리만 다시"), Fast 모드에서 SW-14(차별·시혜 표현) 잔존 시.
 
 ---
 
@@ -218,13 +226,64 @@ urimal-for-socialworker/
     ├── urimal-for-socialworker/     # 메인 윤문 스킬
     │   ├── SKILL.md
     │   ├── resources/
-    │   │   ├── agents/              # 6+1인 에이전트 정의
-    │   │   └── references/          # 우리말 36항목·AI 티 분류 등
-    │   └── scripts/orchestrator.md
+    │   │   ├── agents/              # urimal-monolith (fast) + 6+1인 (strict)
+    │   │   └── references/          # quick-rules-sw·우리말 36항목·AI 티 v2.0·metrics.py 등
+    │   └── scripts/
+    │       ├── orchestrator.md      # fast/strict 분기
+    │       └── prepare_monolith_input.py  # [v2.1] 정량 점수 사전 처리
     └── kordoc/                      # HWP·HWPX 파싱 스킬
         ├── SKILL.md
         └── scripts/kordoc/          # Node.js 파서 (npm install 필요)
 ```
+
+---
+
+## v2.1 — Fast Path + 분류 체계 동기화 + 정량 점수 레이어 (2026-05-10)
+
+upstream `epoko77-ai/im-not-ai`의 v1.5 ~ v2.0 4단계 업그레이드를 사회복지 도메인으로 흡수했습니다.
+
+### 🚀 Fast Path 도입 (가장 큰 변화)
+
+5,000자 보고서 윤문이 **25분 → 2~3분** (86% 단축).
+
+- **`urimal-monolith` 신규 에이전트** — 한 콜에서 SW 14개 카테고리 + 한덕연 36항목 + AI 티 핵심 일괄 처리
+- **`quick-rules-sw.md` 슬림 룰북** — 본진(sw-tell-taxonomy 14개 + urimal-source 36항목 + ai-tell-taxonomy 40+) 중 S1·S2 핵심만 추려 한 줄 처방
+- **도구 호출 3회 캡** — Read 입력 + Read 룰북 + Write final.md
+- **자체검증 7항** — 의미 보존 / 변경률 / 장르 / register / S1 잔존 / **SW-14(차별·시혜) 잔존** / 인공 표현
+- **`<!-- URIMAL-SUMMARY -->` 메타 블록** — final.md 본문 끝에 HTML 주석으로 메트릭·등급·우리말 항목 번호 통합. 마크다운 뷰어에 노출되지 않음
+
+### 📚 분류 체계 v1.3.1 → v2.0 동기화
+
+- **신규 9건**: C-11 연결어미 뒤 쉼표 [S1, KatFish 4.84배 분리도] · C-12 쉼표 포함률 · E-5 분절 평균 길이 · E-6 POS 다양성 · G-3 안전 균형 lexicon · A-16 영어 대명사 직역 [S1] · A-18 관계대명사절 좌향 수식 · A-19 이중 조사 결합 · E-7 청자 경어법 일관성
+- **보강 5건**: D-1, F-4, A-15, A-7, E-2
+- **한국 번역학계 8유형 흡수**: 이근희·김정우·김도훈·곽은주·김순영·박옥수·김혜영·이영옥
+- **학술 인용** `references/scholarship.md` 동봉
+
+### 📊 정량 점수 레이어 (v1.6 신규)
+
+- **`metrics.py`** (404줄, 표준 라이브러리만) — 8지표 계산기 (konlpy/bareun 의존성 0)
+- **`baseline.json`** — KatFish 3장르 baseline + LREAD 캘리브레이션
+- **`prepare_monolith_input.py`** — monolith 호출 전 외부 사전 처리 (선택 사항)
+
+### 🗑️ 폐기 (upstream v1.5 흡수)
+
+다음 4개 파일 제거 — 사용자 사례 미확보 + 핫패스 비용 폭증 원인:
+- `author-context-schema.md` (작가 voice profile)
+- `pattern-candidates.md` (패턴 후보 풀)
+- `promotion-checklist.md`
+- `sample-collection.md`
+
+### 📋 호환성
+
+- 기존 `/윤문` `/윤문-redo` 슬래시 커맨드 그대로
+- 기존 6+1인 파이프라인은 **strict 모드**로 보존 — `--strict` 또는 8,000자+/SW-14 잔존 시 자동 승급
+- 사회복지 14개 카테고리(`sw-tell-taxonomy.md`)·한덕연 36항목 원천(`urimal-source.md`) 무수정
+
+---
+
+## v2.0.0 — 초기 릴리스 (2026-05-03)
+
+[GitHub Release v2.0.0](https://github.com/dreamworker0/urimal-for-socialworker/releases/tag/v2.0.0) — 6+1인 에이전트 파이프라인 + kordoc HWP 파서 통합.
 
 ---
 

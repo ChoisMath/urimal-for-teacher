@@ -1,6 +1,6 @@
 {
   "name": "urimal-for-socialworker",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "사회복지사가 쓴 계획서·주간업무보고서를 한덕연 선생님의 우리말 36항목 기준으로 윤문해주는 6+1인 에이전트 파이프라인 + HWP·HWPX·PDF 파싱 도구.",
   "author": {
     "name": "dreamworker0",
