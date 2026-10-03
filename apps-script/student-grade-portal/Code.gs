@@ -9,6 +9,10 @@
  *   를 보여 준다.
  *
  * - 다른 학생의 개별 점수는 절대 브라우저로 보내지 않는다(통계·구간 개수만 전송).
+ *
+ * - 관리자(기본: 학번 00000, 이름 관리자)로 로그인하면 왼쪽 학생 목록에서
+ *   학생을 골라 각 학생이 보는 화면 그대로 확인할 수 있다.
+ *   스크립트 속성 ADMIN_PASSWORD 를 설정하면 관리자 비밀번호도 확인한다.
  */
 
 /* =========================================================================
@@ -40,6 +44,11 @@ var CONFIG = {
   //   시트 형식: 1행 머리글 [학번 | 비밀번호], 2행부터 데이터
   PASSWORD_SHEET_NAME: '',
 
+  // 관리자 로그인 정보. 비밀번호는 코드에 적지 말고
+  //   [프로젝트 설정 → 스크립트 속성]에 ADMIN_PASSWORD 로 저장한다(선택).
+  ADMIN_ID: '00000',
+  ADMIN_NAME: '관리자',
+
   // 로그인 실패 제한: 같은 학번으로 MAX_FAILS회 실패하면 LOCK_SECONDS 동안 잠금
   MAX_FAILS: 5,
   LOCK_SECONDS: 600,
@@ -55,6 +64,8 @@ function doGet() {
   var template = HtmlService.createTemplateFromFile('Index');
   template.examTitle = getExamTitle_();
   template.requirePassword = !!CONFIG.PASSWORD_SHEET_NAME;
+  template.adminId = CONFIG.ADMIN_ID;
+  template.adminNeedsPassword = !!getAdminPassword_();
 
   return template.evaluate()
     .setTitle(template.examTitle + ' 성적 확인')
@@ -72,7 +83,9 @@ function include(filename) {
  * ========================================================================= */
 
 /**
- * 학번·이름(·비밀번호)을 확인하고 해당 학생의 성적 리포트를 돌려준다.
+ * 학번·이름(·비밀번호)을 확인하고 성적 리포트를 돌려준다.
+ * - 학생: { mode: 'student', report }
+ * - 관리자: { mode: 'admin', students: [목록], reports: { 학번: report } }
  * @param {{studentId: string, name: string, password: string}} form
  */
 function getStudentReport(form) {
@@ -85,6 +98,10 @@ function getStudentReport(form) {
   }
 
   checkNotLocked_(studentId);
+
+  if (studentId === CONFIG.ADMIN_ID) {
+    return getAdminReports_(name, form.password);
+  }
 
   var data = readGradeSheet_();
   var me = null;
@@ -104,11 +121,56 @@ function getStudentReport(form) {
   }
   clearFails_(studentId);
 
+  var totals = data.students.map(function (st) { return st.total; });
+  return {
+    mode: 'student',
+    report: buildReport_(data, me, totals, computeStats_(totals))
+  };
+}
+
+/** 관리자 확인 후 전체 학생 목록과 학생별 리포트를 한 번에 돌려준다. */
+function getAdminReports_(name, password) {
+  var adminPassword = getAdminPassword_();
+  var ok = name === normalizeName_(CONFIG.ADMIN_NAME) &&
+    (!adminPassword || String(password || '') === adminPassword);
+  if (!ok) {
+    recordFail_(CONFIG.ADMIN_ID);
+    throw new Error('관리자 정보가 일치하지 않습니다.');
+  }
+  clearFails_(CONFIG.ADMIN_ID);
+
+  var data = readGradeSheet_();
   var totals = data.students.map(function (s) { return s.total; });
   var stats = computeStats_(totals);
-  var histogram = buildHistogram_(totals, me.total);
-  var pdf = findStudentPdf_(me.studentId, me.name);
 
+  var students = data.students.slice().sort(function (a, b) {
+    return a.studentId < b.studentId ? -1 : a.studentId > b.studentId ? 1 : 0;
+  });
+
+  var reports = {};
+  var list = students.map(function (s) {
+    var report = buildReport_(data, s, totals, stats);
+    reports[s.studentId] = report;
+    return {
+      studentId: s.studentId,
+      name: s.name,
+      total: s.total,
+      reachableGrade: report.guide.reachableGrade,
+      hasPdf: !!report.pdf
+    };
+  });
+
+  return {
+    mode: 'admin',
+    examTitle: getExamTitle_(),
+    stats: stats,
+    students: list,
+    reports: reports
+  };
+}
+
+/** 한 학생에 대한 리포트(학생 화면에 그대로 쓰이는 데이터) */
+function buildReport_(data, me, totals, stats) {
   return {
     examTitle: getExamTitle_(),
     student: {
@@ -123,9 +185,9 @@ function getStudentReport(form) {
     total: me.total,
     totalMax: data.totalMax,
     stats: stats,                // {count, mean, sd, max, min}
-    histogram: histogram,        // {bins:[{from,to,label,count,mine}], binSize}
+    histogram: buildHistogram_(totals, me.total), // {bins:[{from,to,label,count,mine}], binSize}
     guide: buildGradeGuide_(me.total),
-    pdf: pdf                     // {fileId, name, previewUrl, viewUrl} 또는 null
+    pdf: findStudentPdf_(me.studentId, me.name)   // {fileId, name, previewUrl, viewUrl} 또는 null
   };
 }
 
@@ -373,6 +435,11 @@ function checkPassword_(studentId, password) {
   return false;
 }
 
+/** 스크립트 속성 ADMIN_PASSWORD (없으면 빈 문자열) */
+function getAdminPassword_() {
+  return PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD') || '';
+}
+
 function checkNotLocked_(studentId) {
   var fails = Number(CacheService.getScriptCache().get('fail:' + studentId) || 0);
   if (fails >= CONFIG.MAX_FAILS) {
@@ -477,7 +544,10 @@ function testFirstStudentReport() {
 
 function getExamTitle_() {
   if (CONFIG.EXAM_TITLE) return CONFIG.EXAM_TITLE;
-  return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getName();
+  if (getExamTitle_.cached === undefined) {
+    getExamTitle_.cached = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getName();
+  }
+  return getExamTitle_.cached;
 }
 
 /** 학년(1자리) + 반(2자리) + 번호(2자리). 예) 2학년 8반 8번 → 20808 */

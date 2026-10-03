@@ -8,24 +8,27 @@
   <body>
     <header class="topbar">
       <h1><?= examTitle ?></h1>
-      <p class="subtitle">성적 확인</p>
+      <p class="subtitle" id="subtitle">성적 확인</p>
     </header>
 
-    <main class="container">
+    <main class="container" id="container">
       <!-- 로그인 -->
       <section id="loginView" class="card login">
         <h2>본인 확인</h2>
-        <form id="loginForm" autocomplete="off">
+        <form id="loginForm" autocomplete="off"
+              data-require-password="<?= requirePassword ? '1' : '' ?>"
+              data-admin-id="<?= adminId ?>"
+              data-admin-needs-password="<?= adminNeedsPassword ? '1' : '' ?>">
           <label for="studentId">학번 <span class="hint">(예: 20808)</span></label>
           <input id="studentId" name="studentId" inputmode="numeric" pattern="[0-9]*" maxlength="6" required>
 
           <label for="name">이름</label>
           <input id="name" name="name" required>
 
-          <? if (requirePassword) { ?>
-          <label for="password">비밀번호</label>
-          <input id="password" name="password" type="password" required>
-          <? } ?>
+          <div id="passwordWrap" hidden>
+            <label for="password" id="passwordLabel">비밀번호</label>
+            <input id="password" name="password" type="password">
+          </div>
 
           <button id="loginBtn" type="submit">성적 확인하기</button>
           <p id="loginError" class="error" role="alert" hidden></p>
@@ -34,45 +37,65 @@
 
       <!-- 결과 -->
       <section id="reportView" hidden>
-        <div class="card student-head">
-          <div>
-            <div class="student-name" id="studentName"></div>
-            <div class="student-meta" id="studentMeta"></div>
+        <div class="layout">
+          <!-- 관리자 전용: 학생 목록 -->
+          <aside id="adminSidebar" class="card sidebar" hidden>
+            <div class="sidebar-head">
+              <h2>학생 목록</h2>
+              <span class="badge" id="studentCount"></span>
+            </div>
+            <input id="studentSearch" class="search" type="search" placeholder="학번 또는 이름 검색">
+            <select id="studentSort" class="sort">
+              <option value="id">학번순</option>
+              <option value="scoreDesc">점수 높은순</option>
+              <option value="scoreAsc">점수 낮은순</option>
+            </select>
+            <ul id="studentList" class="student-list"></ul>
+            <button id="adminLogoutBtn" class="ghost full" type="button">로그아웃</button>
+          </aside>
+
+          <div class="report-main">
+            <div class="card student-head">
+              <div>
+                <div class="student-name" id="studentName"></div>
+                <div class="student-meta" id="studentMeta"></div>
+              </div>
+              <button id="logoutBtn" class="ghost" type="button">다른 학생으로 확인</button>
+            </div>
+
+            <div class="card">
+              <h2>문항별 점수</h2>
+              <div class="table-wrap">
+                <table class="score-table" id="scoreTable"></table>
+              </div>
+            </div>
+
+            <div class="stats" id="statCards"></div>
+
+            <div class="card">
+              <h2>점수 분포</h2>
+              <div id="histogram" class="histogram"></div>
+              <div class="legend">
+                <span><i class="swatch mine"></i>내 점수가 속한 구간</span>
+                <span><i class="swatch other"></i>다른 구간</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>등급 가능성 안내</h2>
+              <p id="guideMessage" class="guide-message"></p>
+              <div class="guide-tiers" id="guideTiers"></div>
+              <p class="note">※ 남은 평가에서 모두 100점을 받는다고 가정했을 때 도달 가능한 최고 등급입니다.</p>
+            </div>
+
+            <div class="card">
+              <div class="pdf-head">
+                <h2>내 답안지</h2>
+                <a id="pdfOpen" class="link" target="_blank" rel="noopener" hidden>새 창에서 열기 ↗</a>
+              </div>
+              <div id="pdfBox"></div>
+            </div>
           </div>
-          <button id="logoutBtn" class="ghost" type="button">다른 학생으로 확인</button>
-        </div>
-
-        <div class="card">
-          <h2>문항별 점수</h2>
-          <div class="table-wrap">
-            <table class="score-table" id="scoreTable"></table>
-          </div>
-        </div>
-
-        <div class="stats" id="statCards"></div>
-
-        <div class="card">
-          <h2>점수 분포</h2>
-          <div id="histogram" class="histogram"></div>
-          <div class="legend">
-            <span><i class="swatch mine"></i>내 점수가 속한 구간</span>
-            <span><i class="swatch other"></i>다른 구간</span>
-          </div>
-        </div>
-
-        <div class="card">
-          <h2>등급 가능성 안내</h2>
-          <p id="guideMessage" class="guide-message"></p>
-          <div class="guide-tiers" id="guideTiers"></div>
-          <p class="note">※ 남은 평가에서 모두 100점을 받는다고 가정했을 때 도달 가능한 최고 등급입니다.</p>
-        </div>
-
-        <div class="card">
-          <div class="pdf-head">
-            <h2>내 답안지</h2>
-            <a id="pdfOpen" class="link" target="_blank" rel="noopener" hidden>새 창에서 열기 ↗</a>
-          </div>
-          <div id="pdfBox"></div>
         </div>
       </section>
     </main>

@@ -9,6 +9,26 @@
     var loginError = $('loginError');
     var loading = $('loading');
 
+    var requirePassword = loginForm.dataset.requirePassword === '1';
+    var adminId = loginForm.dataset.adminId;
+    var adminNeedsPassword = loginForm.dataset.adminNeedsPassword === '1';
+
+    // 관리자 모드 상태
+    var admin = null;          // { students: [...], reports: {학번: report} }
+    var selectedId = null;
+
+    /* ---------------- 로그인 ---------------- */
+
+    function updatePasswordField() {
+      var isAdmin = $('studentId').value.trim() === adminId;
+      var show = isAdmin ? adminNeedsPassword : requirePassword;
+      $('passwordWrap').hidden = !show;
+      $('password').required = show;
+      $('passwordLabel').textContent = isAdmin ? '관리자 비밀번호' : '비밀번호';
+    }
+    $('studentId').addEventListener('input', updatePasswordField);
+    updatePasswordField();
+
     loginForm.addEventListener('submit', function (e) {
       e.preventDefault();
       loginError.hidden = true;
@@ -16,7 +36,7 @@
       var form = {
         studentId: $('studentId').value.trim(),
         name: $('name').value.trim(),
-        password: $('password') ? $('password').value : ''
+        password: $('passwordWrap').hidden ? '' : $('password').value
       };
       if (!/^\d{4,6}$/.test(form.studentId)) {
         showError('학번은 숫자로 입력해 주세요. (예: 20808)');
@@ -25,9 +45,10 @@
 
       setBusy(true);
       google.script.run
-        .withSuccessHandler(function (report) {
+        .withSuccessHandler(function (res) {
           setBusy(false);
-          renderReport(report);
+          if (res.mode === 'admin') enterAdmin(res);
+          else enterStudent(res.report);
         })
         .withFailureHandler(function (err) {
           setBusy(false);
@@ -36,14 +57,25 @@
         .getStudentReport(form);
     });
 
-    $('logoutBtn').addEventListener('click', function () {
+    $('logoutBtn').addEventListener('click', logout);
+    $('adminLogoutBtn').addEventListener('click', logout);
+
+    function logout() {
+      admin = null;
+      selectedId = null;
+      document.body.classList.remove('admin');
+      $('subtitle').textContent = '성적 확인';
+      $('adminSidebar').hidden = true;
+      $('studentList').innerHTML = '';
+      $('studentSearch').value = '';
       reportView.hidden = true;
       loginView.hidden = false;
       loginForm.reset();
+      updatePasswordField();
       $('pdfBox').innerHTML = '';
       $('studentId').focus();
       window.scrollTo(0, 0);
-    });
+    }
 
     function setBusy(busy) {
       loading.hidden = !busy;
@@ -54,6 +86,136 @@
       loginError.textContent = msg;
       loginError.hidden = false;
     }
+
+    function showReportView() {
+      loginView.hidden = true;
+      reportView.hidden = false;
+      window.scrollTo(0, 0);
+    }
+
+    /* ---------------- 학생 모드 ---------------- */
+
+    function enterStudent(report) {
+      $('adminSidebar').hidden = true;
+      $('logoutBtn').hidden = false;
+      renderReport(report);
+      showReportView();
+    }
+
+    /* ---------------- 관리자 모드 ---------------- */
+
+    function enterAdmin(res) {
+      admin = res;
+      document.body.classList.add('admin');
+      $('subtitle').textContent = '관리자 모드 · 전체 학생 성적';
+      $('adminSidebar').hidden = false;
+      $('logoutBtn').hidden = true;
+      $('studentCount').textContent = res.students.length + '명';
+      $('studentSearch').value = '';
+      $('studentSort').value = 'id';
+      renderStudentList();
+      showReportView();
+      if (res.students.length) selectStudent(res.students[0].studentId, false);
+    }
+
+    $('studentSearch').addEventListener('input', renderStudentList);
+    $('studentSort').addEventListener('change', renderStudentList);
+
+    function visibleStudents() {
+      var q = $('studentSearch').value.replace(/\s+/g, '').toLowerCase();
+      var list = admin.students.filter(function (s) {
+        return !q || s.studentId.indexOf(q) >= 0 || s.name.replace(/\s+/g, '').toLowerCase().indexOf(q) >= 0;
+      });
+      var sort = $('studentSort').value;
+      list.sort(function (a, b) {
+        if (sort === 'scoreDesc') return b.total - a.total || cmp(a.studentId, b.studentId);
+        if (sort === 'scoreAsc') return a.total - b.total || cmp(a.studentId, b.studentId);
+        return cmp(a.studentId, b.studentId);
+      });
+      return list;
+    }
+
+    function renderStudentList() {
+      if (!admin) return;
+      var ul = $('studentList');
+      ul.innerHTML = '';
+      var list = visibleStudents();
+      if (!list.length) {
+        var empty = document.createElement('li');
+        empty.className = 'empty-item';
+        empty.textContent = '검색 결과가 없습니다.';
+        ul.appendChild(empty);
+        return;
+      }
+      list.forEach(function (s) {
+        var li = document.createElement('li');
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'student-item' + (s.studentId === selectedId ? ' active' : '');
+        btn.dataset.id = s.studentId;
+
+        var left = document.createElement('span');
+        left.className = 'who';
+        var id = document.createElement('span');
+        id.className = 'sid';
+        id.textContent = s.studentId;
+        var nm = document.createElement('span');
+        nm.className = 'sname';
+        nm.textContent = s.name;
+        left.appendChild(id);
+        left.appendChild(nm);
+        if (!s.hasPdf) {
+          var warn = document.createElement('span');
+          warn.className = 'nopdf';
+          warn.title = '답안지 PDF 없음';
+          warn.textContent = 'PDF 없음';
+          left.appendChild(warn);
+        }
+
+        var right = document.createElement('span');
+        right.className = 'score';
+        right.textContent = fmt(s.total) + '점';
+        var g = document.createElement('span');
+        g.className = 'grade-chip g-' + (s.reachableGrade || 'none');
+        g.textContent = s.reachableGrade || '-';
+        right.appendChild(g);
+
+        btn.appendChild(left);
+        btn.appendChild(right);
+        btn.addEventListener('click', function () { selectStudent(s.studentId, true); });
+        li.appendChild(btn);
+        ul.appendChild(li);
+      });
+    }
+
+    function selectStudent(studentId, scroll) {
+      var report = admin && admin.reports[studentId];
+      if (!report) return;
+      selectedId = studentId;
+      Array.prototype.forEach.call(document.querySelectorAll('.student-item'), function (b) {
+        b.classList.toggle('active', b.dataset.id === studentId);
+      });
+      renderReport(report);
+      if (scroll && window.matchMedia('(max-width: 900px)').matches) {
+        document.querySelector('.report-main').scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    // 관리자 모드에서 ↑/↓ 키로 학생 이동
+    document.addEventListener('keydown', function (e) {
+      if (!admin || reportView.hidden) return;
+      if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      var list = visibleStudents();
+      var i = list.map(function (s) { return s.studentId; }).indexOf(selectedId);
+      var next = list[i + (e.key === 'ArrowDown' ? 1 : -1)];
+      if (next) {
+        e.preventDefault();
+        selectStudent(next.studentId, false);
+        var btn = document.querySelector('.student-item.active');
+        if (btn) btn.scrollIntoView({ block: 'nearest' });
+      }
+    });
 
     /* ------------------------------------------------------------------ */
 
@@ -68,10 +230,6 @@
       renderHistogram(r);
       renderGuide(r);
       renderPdf(r.pdf);
-
-      loginView.hidden = true;
-      reportView.hidden = false;
-      window.scrollTo(0, 0);
     }
 
     /** 문항 번호 머리글 + 내 점수 한 행 */
@@ -299,6 +457,10 @@
       var node = document.createElementNS(ns, tag);
       Object.keys(attrs).forEach(function (k) { node.setAttribute(k, attrs[k]); });
       return node;
+    }
+
+    function cmp(a, b) {
+      return a < b ? -1 : a > b ? 1 : 0;
     }
 
     function fmt(n) {
