@@ -113,13 +113,46 @@
       $('studentCount').textContent = res.students.length + '명';
       $('studentSearch').value = '';
       $('studentSort').value = 'id';
-      renderStudentList();
+      $('hideScores').checked = loadHideScores();
+      applyHideScores();
       showReportView();
       if (res.students.length) selectStudent(res.students[0].studentId, false);
     }
 
     $('studentSearch').addEventListener('input', renderStudentList);
     $('studentSort').addEventListener('change', renderStudentList);
+    $('hideScores').addEventListener('change', function () {
+      saveHideScores($('hideScores').checked);
+      applyHideScores();
+    });
+
+    /**
+     * 목록 점수 가리기: 점수·등급을 목록에 그리지 않고,
+     * 점수순 정렬도 순위가 드러나므로 학번순으로 고정한다.
+     * (오른쪽에는 선택한 학생의 성적만 보인다.)
+     */
+    function applyHideScores() {
+      var hide = $('hideScores').checked;
+      var sort = $('studentSort');
+      if (hide) sort.value = 'id';
+      sort.disabled = hide;
+      sort.title = hide ? '점수를 가린 동안에는 학번순으로만 정렬됩니다.' : '';
+      renderStudentList();
+    }
+
+    // 브라우저에 마지막 선택을 기억(기본값: 가림)
+    function loadHideScores() {
+      try {
+        return localStorage.getItem('hideListScores') !== '0';
+      } catch (e) {
+        return true;
+      }
+    }
+    function saveHideScores(hide) {
+      try {
+        localStorage.setItem('hideListScores', hide ? '1' : '0');
+      } catch (e) { /* 저장할 수 없으면 무시 */ }
+    }
 
     function visibleStudents() {
       var q = $('studentSearch').value.replace(/\s+/g, '').toLowerCase();
@@ -147,6 +180,7 @@
         ul.appendChild(empty);
         return;
       }
+      var hideScores = $('hideScores').checked;
       list.forEach(function (s) {
         var li = document.createElement('li');
         var btn = document.createElement('button');
@@ -181,7 +215,7 @@
         right.appendChild(g);
 
         btn.appendChild(left);
-        btn.appendChild(right);
+        if (!hideScores) btn.appendChild(right);
         btn.addEventListener('click', function () { selectStudent(s.studentId, true); });
         li.appendChild(btn);
         ul.appendChild(li);

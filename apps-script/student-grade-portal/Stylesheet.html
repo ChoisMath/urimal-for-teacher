@@ -229,6 +229,40 @@
     font-size: .95rem;
     background: #fff;
   }
+  .sort:disabled { color: var(--muted); background: #f8fafc; }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: .9rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .toggle .track {
+    position: relative;
+    flex: none;
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--other);
+    transition: background .15s;
+  }
+  .toggle .thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .2);
+    transition: transform .15s;
+  }
+  .toggle input:checked + .track { background: var(--primary); }
+  .toggle input:checked + .track .thumb { transform: translateX(16px); }
+  .toggle input:focus-visible + .track { outline: 2px solid var(--primary); outline-offset: 2px; }
   .student-list {
     list-style: none;
     margin: 10px 0 0;
@@ -281,7 +315,41 @@
   @media (max-width: 900px) {
     body.admin .layout { display: block; }
     .sidebar { position: static; max-height: none; }
-    .student-list { max-height: 260px; }
+    .sort:disabled { color: var(--muted); background: #f8fafc; }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: .9rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .toggle .track {
+    position: relative;
+    flex: none;
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--other);
+    transition: background .15s;
+  }
+  .toggle .thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .2);
+    transition: transform .15s;
+  }
+  .toggle input:checked + .track { background: var(--primary); }
+  .toggle input:checked + .track .thumb { transform: translateX(16px); }
+  .toggle input:focus-visible + .track { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .student-list { max-height: 260px; }
   }
 
   /* 로딩 */
