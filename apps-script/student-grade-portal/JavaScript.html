@@ -1,0 +1,311 @@
+<script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+
+    var loginView = $('loginView');
+    var reportView = $('reportView');
+    var loginForm = $('loginForm');
+    var loginBtn = $('loginBtn');
+    var loginError = $('loginError');
+    var loading = $('loading');
+
+    loginForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      loginError.hidden = true;
+
+      var form = {
+        studentId: $('studentId').value.trim(),
+        name: $('name').value.trim(),
+        password: $('password') ? $('password').value : ''
+      };
+      if (!/^\d{4,6}$/.test(form.studentId)) {
+        showError('학번은 숫자로 입력해 주세요. (예: 20808)');
+        return;
+      }
+
+      setBusy(true);
+      google.script.run
+        .withSuccessHandler(function (report) {
+          setBusy(false);
+          renderReport(report);
+        })
+        .withFailureHandler(function (err) {
+          setBusy(false);
+          showError(err && err.message ? err.message : String(err));
+        })
+        .getStudentReport(form);
+    });
+
+    $('logoutBtn').addEventListener('click', function () {
+      reportView.hidden = true;
+      loginView.hidden = false;
+      loginForm.reset();
+      $('pdfBox').innerHTML = '';
+      $('studentId').focus();
+      window.scrollTo(0, 0);
+    });
+
+    function setBusy(busy) {
+      loading.hidden = !busy;
+      loginBtn.disabled = busy;
+    }
+
+    function showError(msg) {
+      loginError.textContent = msg;
+      loginError.hidden = false;
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    function renderReport(r) {
+      var s = r.student;
+      $('studentName').textContent = s.name;
+      $('studentMeta').textContent =
+        '학번 ' + s.studentId + ' · ' + s.grade + '학년 ' + s.classNo + '반 ' + s.number + '번';
+
+      renderScoreTable(r);
+      renderStats(r);
+      renderHistogram(r);
+      renderGuide(r);
+      renderPdf(r.pdf);
+
+      loginView.hidden = true;
+      reportView.hidden = false;
+      window.scrollTo(0, 0);
+    }
+
+    /** 문항 번호 머리글 + 내 점수 한 행 */
+    function renderScoreTable(r) {
+      var table = $('scoreTable');
+      table.innerHTML = '';
+
+      var thead = document.createElement('thead');
+      var headRow = document.createElement('tr');
+      r.questions.forEach(function (q) {
+        var label = /^\d+$/.test(q.label) ? q.label + '번' : q.label;
+        headRow.appendChild(th(label, q.max));
+      });
+      var totalTh = th('총점', r.totalMax);
+      totalTh.className = 'total';
+      headRow.appendChild(totalTh);
+      thead.appendChild(headRow);
+
+      var tbody = document.createElement('tbody');
+      var row = document.createElement('tr');
+      r.scores.forEach(function (v, i) {
+        var td = document.createElement('td');
+        td.textContent = v === null ? '-' : fmt(v);
+        var max = r.questions[i].max;
+        if (v !== null && max !== null && v >= max) td.className = 'full';
+        else if (v === 0) td.className = 'zero';
+        row.appendChild(td);
+      });
+      var totalTd = document.createElement('td');
+      totalTd.className = 'total';
+      totalTd.textContent = fmt(r.total);
+      row.appendChild(totalTd);
+      tbody.appendChild(row);
+
+      table.appendChild(thead);
+      table.appendChild(tbody);
+    }
+
+    function th(text, max) {
+      var el = document.createElement('th');
+      el.appendChild(document.createTextNode(text));
+      if (max !== null && max !== undefined) {
+        var small = document.createElement('small');
+        small.textContent = '/' + fmt(max);
+        el.appendChild(small);
+      }
+      return el;
+    }
+
+    function renderStats(r) {
+      var items = [
+        { label: '내 점수', value: fmt(r.total) + '점', mine: true },
+        { label: '전체 평균', value: fmt(r.stats.mean) + '점' },
+        { label: '표준편차', value: fmt(r.stats.sd) },
+        { label: '응시 인원', value: r.stats.count + '명' }
+      ];
+      var box = $('statCards');
+      box.innerHTML = '';
+      items.forEach(function (it) {
+        var card = document.createElement('div');
+        card.className = 'stat' + (it.mine ? ' mine' : '');
+        var label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = it.label;
+        var value = document.createElement('div');
+        value.className = 'value';
+        value.textContent = it.value;
+        card.appendChild(label);
+        card.appendChild(value);
+        box.appendChild(card);
+      });
+    }
+
+    /** SVG 히스토그램: 내 구간은 주황색, 평균은 파란 점선 */
+    function renderHistogram(r) {
+      var bins = r.histogram.bins;
+      var W = 640, H = 280;
+      var m = { top: 44, right: 12, bottom: 36, left: 12 };
+      var pw = W - m.left - m.right;
+      var ph = H - m.top - m.bottom;
+      var maxCount = Math.max.apply(null, bins.map(function (b) { return b.count; })) || 1;
+      var bw = pw / bins.length;
+      var gap = Math.min(8, bw * 0.15);
+      var NS = 'http://www.w3.org/2000/svg';
+
+      var svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      svg.setAttribute('role', 'img');
+      svg.setAttribute('aria-label', '총점 분포 히스토그램');
+
+      bins.forEach(function (b, i) {
+        var h = (b.count / maxCount) * ph;
+        var x = m.left + i * bw + gap / 2;
+        var y = m.top + ph - h;
+
+        var rect = el(NS, 'rect', {
+          x: x, y: y, width: bw - gap, height: Math.max(h, 0), rx: 3,
+          'class': 'bar' + (b.mine ? ' mine' : '')
+        });
+        var title = document.createElementNS(NS, 'title');
+        title.textContent = b.label + '점: ' + b.count + '명' + (b.mine ? ' (내 구간)' : '');
+        rect.appendChild(title);
+        svg.appendChild(rect);
+
+        if (b.count > 0 || b.mine) {
+          var t = el(NS, 'text', {
+            x: x + (bw - gap) / 2, y: y - 6,
+            'class': 'count' + (b.mine ? ' mine' : '')
+          });
+          t.textContent = b.count + '명';
+          svg.appendChild(t);
+        }
+
+        var lab = el(NS, 'text', {
+          x: m.left + i * bw + bw / 2, y: m.top + ph + 16, 'class': 'axis-label'
+        });
+        lab.textContent = b.label;
+        svg.appendChild(lab);
+
+        if (b.mine) {
+          var me = el(NS, 'text', {
+            x: m.left + i * bw + bw / 2, y: m.top + ph + 31, 'class': 'count mine'
+          });
+          me.textContent = '▲ 나';
+          svg.appendChild(me);
+        }
+      });
+
+      svg.appendChild(el(NS, 'line', {
+        x1: m.left, x2: m.left + pw, y1: m.top + ph, y2: m.top + ph, 'class': 'axis'
+      }));
+
+      // 평균선
+      var maxScore = bins[bins.length - 1].to;
+      var mx = m.left + (r.stats.mean / maxScore) * pw;
+      svg.appendChild(el(NS, 'line', {
+        x1: mx, x2: mx, y1: 18, y2: m.top + ph, 'class': 'mean-line'
+      }));
+      var mt = el(NS, 'text', {
+        x: mx + 4, y: 14, 'class': 'mean-text'
+      });
+      mt.textContent = '평균 ' + fmt(r.stats.mean);
+      if (mx > W - 90) {
+        mt.setAttribute('x', mx - 4);
+        mt.setAttribute('text-anchor', 'end');
+      }
+      svg.appendChild(mt);
+
+      var box = $('histogram');
+      box.innerHTML = '';
+      box.appendChild(svg);
+    }
+
+    function renderGuide(r) {
+      var g = r.guide;
+      var total = fmt(r.total);
+      var msg = $('guideMessage');
+      msg.innerHTML = '';
+
+      var reach = g.tiers.filter(function (t) { return t.mine; })[0];
+      if (reach) {
+        var lead = reach.min > 0
+          ? '현재 점수 ' + total + '점은 ' + reach.min + '점 이상이므로, '
+          : '현재 점수(' + total + '점)와 관계없이, 0점이어도 ';
+        msg.appendChild(document.createTextNode(lead + '나머지 평가가 모두 100점이면 '));
+        var strong = document.createElement('strong');
+        strong.textContent = reach.grade + '등급';
+        msg.appendChild(strong);
+        msg.appendChild(document.createTextNode('이 가능합니다.'));
+      } else {
+        msg.textContent = '등급 안내 기준을 확인할 수 없습니다. 선생님께 문의해 주세요.';
+      }
+
+      var box = $('guideTiers');
+      box.innerHTML = '';
+      g.tiers.forEach(function (t) {
+        var card = document.createElement('div');
+        card.className = 'tier' + (t.mine ? ' mine' : '');
+        var grade = document.createElement('div');
+        grade.className = 'grade';
+        grade.textContent = t.grade;
+        var cond = document.createElement('div');
+        cond.className = 'cond';
+        cond.textContent = t.min > 0 ? '현재 ' + t.min + '점 이상' : '현재 0점 이상';
+        card.appendChild(grade);
+        card.appendChild(cond);
+        if (t.mine) {
+          var badge = document.createElement('div');
+          badge.className = 'cond';
+          badge.textContent = '나의 최고 가능 등급';
+          card.appendChild(badge);
+        }
+        box.appendChild(card);
+      });
+    }
+
+    function renderPdf(pdf) {
+      var box = $('pdfBox');
+      var open = $('pdfOpen');
+      box.innerHTML = '';
+
+      if (!pdf) {
+        open.hidden = true;
+        var p = document.createElement('p');
+        p.className = 'empty';
+        p.textContent = '아직 답안지 파일이 등록되지 않았습니다. 선생님께 문의해 주세요.';
+        box.appendChild(p);
+        return;
+      }
+
+      var iframe = document.createElement('iframe');
+      iframe.className = 'pdf-frame';
+      iframe.src = pdf.previewUrl;
+      iframe.title = pdf.name;
+      iframe.setAttribute('allow', 'autoplay');
+      box.appendChild(iframe);
+
+      open.href = pdf.viewUrl;
+      open.hidden = false;
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    function el(ns, tag, attrs) {
+      var node = document.createElementNS(ns, tag);
+      Object.keys(attrs).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+      return node;
+    }
+
+    function fmt(n) {
+      if (n === null || n === undefined || n === '') return '-';
+      var num = Number(n);
+      if (!isFinite(num)) return String(n);
+      return Number.isInteger(num) ? String(num) : String(Math.round(num * 100) / 100);
+    }
+  })();
+</script>

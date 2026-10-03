@@ -1,0 +1,215 @@
+<style>
+  :root {
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --primary: #2563eb;
+    --primary-soft: #dbeafe;
+    --mine: #f97316;
+    --mine-soft: #ffedd5;
+    --other: #cbd5e1;
+    --error: #dc2626;
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    line-height: 1.5;
+    word-break: keep-all;
+  }
+
+  .topbar {
+    background: var(--primary);
+    color: #fff;
+    padding: 20px 16px;
+    text-align: center;
+  }
+  .topbar h1 { margin: 0; font-size: 1.3rem; }
+  .topbar .subtitle { margin: 4px 0 0; opacity: .85; font-size: .95rem; }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 1.05rem; }
+
+  /* 로그인 */
+  .login { max-width: 400px; margin: 24px auto; }
+  .login form { display: flex; flex-direction: column; }
+  .login label { font-weight: 600; margin: 10px 0 4px; font-size: .95rem; }
+  .login .hint { font-weight: 400; color: var(--muted); font-size: .85rem; }
+  .login input {
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 1rem;
+  }
+  .login input:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+
+  button {
+    margin-top: 18px;
+    padding: 11px 14px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .6; cursor: default; }
+  button.ghost {
+    margin: 0;
+    background: transparent;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+    font-size: .9rem;
+    padding: 8px 12px;
+  }
+
+  .error { color: var(--error); margin: 12px 0 0; font-size: .92rem; }
+
+  /* 학생 정보 */
+  .student-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .student-name { font-size: 1.3rem; font-weight: 700; }
+  .student-meta { color: var(--muted); }
+
+  /* 점수 표 (한 행) */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .score-table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 640px;
+    text-align: center;
+  }
+  .score-table th,
+  .score-table td {
+    border: 1px solid var(--line);
+    padding: 8px 6px;
+    white-space: nowrap;
+  }
+  .score-table th { background: #f8fafc; font-weight: 600; font-size: .9rem; }
+  .score-table th small { display: block; color: var(--muted); font-weight: 400; font-size: .75rem; }
+  .score-table td { font-size: 1.05rem; }
+  .score-table .total { background: var(--primary-soft); font-weight: 700; }
+  .score-table td.full { color: var(--primary); font-weight: 600; }
+  .score-table td.zero { color: var(--error); }
+
+  /* 통계 카드 */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .stat {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+    padding: 14px 16px;
+  }
+  .stat .label { color: var(--muted); font-size: .85rem; }
+  .stat .value { font-size: 1.5rem; font-weight: 700; margin-top: 2px; }
+  .stat.mine .value { color: var(--mine); }
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* 히스토그램 */
+  .histogram { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .histogram svg { width: 100%; min-width: 520px; height: auto; display: block; }
+  .histogram .bar { fill: var(--other); }
+  .histogram .bar.mine { fill: var(--mine); }
+  .histogram .count { font-size: 12px; fill: var(--text); text-anchor: middle; }
+  .histogram .count.mine { font-weight: 700; fill: var(--mine); }
+  .histogram .axis-label { font-size: 11px; fill: var(--muted); text-anchor: middle; }
+  .histogram .axis { stroke: var(--line); }
+  .histogram .mean-line { stroke: var(--primary); stroke-width: 2; stroke-dasharray: 5 4; }
+  .histogram .mean-text { font-size: 12px; fill: var(--primary); font-weight: 600; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: .85rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+  .swatch.mine { background: var(--mine); }
+  .swatch.other { background: var(--other); }
+
+  /* 등급 안내 */
+  .guide-message {
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: var(--mine-soft);
+    font-size: 1rem;
+  }
+  .guide-message strong { color: var(--mine); }
+  .guide-tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .tier {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .tier .grade { font-size: 1.6rem; font-weight: 800; }
+  .tier .cond { font-size: .85rem; }
+  .tier.mine { border: 2px solid var(--mine); background: var(--mine-soft); color: var(--text); }
+  .tier.mine .grade { color: var(--mine); }
+  .note { color: var(--muted); font-size: .82rem; margin: 10px 0 0; }
+
+  /* PDF */
+  .pdf-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .link { color: var(--primary); text-decoration: none; font-size: .9rem; }
+  .pdf-frame {
+    width: 100%;
+    height: 80vh;
+    min-height: 480px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fafafa;
+  }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+
+  /* 로딩 */
+  .loading {
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 255, 255, .75);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .loading[hidden] { display: none; }
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--primary-soft);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
